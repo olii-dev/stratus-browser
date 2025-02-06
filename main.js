@@ -48,6 +48,19 @@ app.whenReady().then(() => {
     mainWindow.on('closed', () => {
         globalShortcut.unregisterAll(); // Clean up shortcuts when window closes
     });
+
+    globalShortcut.register('CommandOrControl+<', () => {
+    if (tabs[activeTabIndex]) {
+        tabs[activeTabIndex].webContents.goBack();
+    }
+});
+
+globalShortcut.register('CommandOrControl+>', () => {
+    if (tabs[activeTabIndex]) {
+        tabs[activeTabIndex].webContents.goForward();
+    }
+});
+
 });
 
 function createNewTab() {
