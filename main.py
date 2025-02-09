@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineHistory
 from PyQt6.QtCore import QUrl, Qt
-from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut
+from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut, QFontDatabase
 
 class HistoryManager:
     def __init__(self):
@@ -50,24 +50,27 @@ class CustomTabWidget(QTabWidget):
         self.new_tab_button = QPushButton("+")
         self.new_tab_button.setStyleSheet("""
             QPushButton {
-                background-color: #444;
+                background-color: transparent;
                 color: #fff;
-                padding: 5px 10px;
-                border-radius: 4px;
+                padding: 5px;
+                border-radius: 15px;
                 margin: 2px 8px 2px 2px;
-                min-width: 28px;
-                max-width: 28px;
-                font-size: 16px;
-                font-weight: bold;
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 30px;
+                max-height: 30px;
+                font-size: 18px;
+                font-weight: 400;
+                line-height: 1;
             }
             QPushButton:hover {
-                background-color: #555;
+                background-color: rgba(255, 255, 255, 0.1);
             }
             QPushButton:pressed {
-                background-color: #333;
+                background-color: rgba(255, 255, 255, 0.05);
             }
         """)
-        
+
         self.setCornerWidget(self.new_tab_button, Qt.Corner.TopRightCorner)
 
 class BrowserTab(QWidget):
@@ -82,12 +85,12 @@ class BrowserTab(QWidget):
         self.browser.setUrl(QUrl("https://www.google.com"))
         
         nav_container = QWidget()
-        nav_container.setFixedHeight(44)
+        nav_container.setFixedHeight(64)  # Increased height
         nav_container.setStyleSheet("""
             QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                          stop:0 #363636, stop:1 #2b2b2b);
-                border-bottom: 1px solid #222;
+                background: #1a1a1a;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
             }
         """)
         
@@ -118,21 +121,25 @@ class BrowserTab(QWidget):
             QPushButton {
                 background-color: transparent;
                 color: #fff;
-                padding: 6px 12px;
-                border-radius: 4px;
-                margin: 6px 2px;
-                min-width: 30px;
-                font-size: 14px;
-                font-weight: bold;
+                padding: 0;
+                border-radius: 20px;
+                margin: 12px 4px;
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 40px;
+                max-height: 40px;
+                font-size: 16px;
+                font-weight: 400;
+                line-height: 40px;
             }
             QPushButton:hover {
                 background-color: rgba(255, 255, 255, 0.1);
             }
             QPushButton:pressed {
-                background-color: rgba(0, 0, 0, 0.1);
+                background-color: rgba(255, 255, 255, 0.05);
             }
             QPushButton:disabled {
-                color: #666;
+                color: rgba(255, 255, 255, 0.3);
             }
         """
         
@@ -149,7 +156,8 @@ class BrowserTab(QWidget):
         self.reload_button.clicked.connect(self.browser.reload)
         
         nav_layout = QHBoxLayout(nav_container)
-        nav_layout.setContentsMargins(8, 0, 8, 0)
+        nav_layout.setContentsMargins(12, 0, 12, 0)
+        nav_layout.setSpacing(2)
         nav_layout.addWidget(self.back_button)
         nav_layout.addWidget(self.forward_button)
         nav_layout.addWidget(self.reload_button)
@@ -317,20 +325,47 @@ class CloseButtonTabBar(QTabBar):
     def __init__(self):
         super().__init__()
         self.setStyleSheet("""
+            QTabBar {
+                background: transparent;
+            }
+            QTabBar::tab {
+                background: rgba(255, 255, 255, 0.05);
+                color: #bbb;
+                padding: 8px 32px 8px 16px;
+                margin: 8px 2px 0px 2px;
+                border-radius: 12px 12px 0 0;
+                min-width: 120px;
+                max-width: 200px;
+                min-height: 20px;
+                font-size: 13px;
+                line-height: 20px;
+            }
+            QTabBar::tab:selected {
+                background: rgba(255, 255, 255, 0.08);
+                color: #fff;
+            }
+            QTabBar::tab:hover:!selected {
+                background: rgba(255, 255, 255, 0.07);
+                color: #fff;
+            }
             QTabBar::close-button {
                 image: none;
+                subcontrol-position: right;
+                subcontrol-origin: padding;
+                margin-right: 4px;
             }
             QTabBar::close-button::after {
-                content: '×';
-                color: #999;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 2px;
+                image: url(close-icon.png);
+                color: rgba(255, 255, 255, 0.5);
+                font-size: 16px;
+                font-weight: 400;
+                background: transparent;
+                border-radius: 10px;
+                padding: 2px 6px;
             }
             QTabBar::close-button:hover::after {
                 color: white;
                 background: rgba(255, 255, 255, 0.1);
-                border-radius: 2px;
             }
         """)
 
@@ -344,14 +379,14 @@ class StratusBrowser(QMainWindow):
 
         self.setStyleSheet("""
             QMainWindow { 
-                background: #2b2b2b;
+                background: #1a1a1a;
             }
             QWidget { 
-                background: #2b2b2b;
+                background: #1a1a1a;
             }
             QTabWidget::pane {
                 border: none;
-                background: #2b2b2b;
+                background: #1a1a1a;
             }
             QTabBar::tab {
                 background: #333;
@@ -468,17 +503,17 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     
     dark_palette = QPalette()
-    dark_palette.setColor(QPalette.ColorRole.Window, QColor(43, 43, 43))
+    dark_palette.setColor(QPalette.ColorRole.Window, QColor(26, 26, 26))
     dark_palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
-    dark_palette.setColor(QPalette.ColorRole.Base, QColor(43, 43, 43))
-    dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ColorRole.Base, QColor(26, 26, 26))
+    dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(35, 35, 35))
     dark_palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255))
     dark_palette.setColor(QPalette.ColorRole.ToolTipText, QColor(255, 255, 255))
     dark_palette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
-    dark_palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ColorRole.Button, QColor(35, 35, 35))
     dark_palette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
-    dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-    dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.ColorRole.Link, QColor(66, 133, 244))
+    dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(66, 133, 244))
     dark_palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
     
     app.setPalette(dark_palette)
