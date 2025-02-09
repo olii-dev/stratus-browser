@@ -1,11 +1,49 @@
 import sys
 import re
+import urllib.parse
+from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, 
                             QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineHistory
 from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut
 
+class HistoryManager:
+    def __init__(self):
+        self.history_items = []
+
+    def add_item(self, url, title):
+        if not title:
+            title = url
+        self.history_items.append({
+            'url': url,
+            'title': title,
+            'timestamp': datetime.now()
+        })
+
+    def get_items(self):
+        return sorted(self.history_items, key=lambda x: x['timestamp'], reverse=True)
+
+    def get_display_text(self, url, title):
+        if "google.com/search" in url:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('q', [''])[0]
+            return f"Searched for: {query}" if query else "Google Search"
+        
+        if any(engine in url for engine in ["bing.com/search", "yahoo.com/search", "duckduckgo.com"]):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('q', [''])[0]
+            return f"Searched for: {query}" if query else "Web Search"
+        
+        if "youtube.com/watch" in url:
+            return f"Watched: {title}"
+        
+        if title == url:
+            domain = urllib.parse.urlparse(url).netloc
+            domain = re.sub(r'^www\.', '', domain)  # Remove www.
+            return f"Visited {domain}"
+        
+        return title
+    
 class CustomTabWidget(QTabWidget):
     def __init__(self):
         super().__init__()
@@ -33,8 +71,9 @@ class CustomTabWidget(QTabWidget):
         self.setCornerWidget(self.new_tab_button, Qt.Corner.TopRightCorner)
 
 class BrowserTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, history_manager, parent=None):
         super().__init__(parent)
+        self.history_manager = history_manager
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -120,9 +159,9 @@ class BrowserTab(QWidget):
         self.layout.addWidget(self.browser)
         
         self.browser.urlChanged.connect(self.update_url)
+        self.browser.urlChanged.connect(self.record_history)
         self.browser.loadStarted.connect(lambda: self.reload_button.setText("✕"))
         self.browser.loadFinished.connect(lambda: self.reload_button.setText("⟳"))
-        
         self.browser.loadFinished.connect(self.update_navigation_state)
         
         # Add tab-specific shortcuts
@@ -158,6 +197,122 @@ class BrowserTab(QWidget):
         else:
             self.url_bar.setText(url.toString())
 
+    def record_history(self, url):
+        if url.isValid() and not url.toString().startswith("data:"):
+            self.history_manager.add_item(url.toString(), self.browser.title())
+
+class HistoryTab(BrowserTab):
+    def __init__(self, browser_window, history_manager, parent=None):
+        super().__init__(history_manager, parent)
+        self.browser_window = browser_window
+        self.display_history()
+
+    def get_day_header(self, date):
+        today = datetime.now().date()
+        diff = (today - date.date()).days
+
+        if diff == 0:
+            return "Today"
+        elif diff == 1:
+            return "Yesterday"
+        elif diff < 7:
+            return date.strftime('%A')
+        elif diff < 30:
+            return "Last Month"
+        else:
+            return date.strftime('%B %Y')
+
+    def display_history(self):
+        history_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                    margin: 0;
+                    padding: 20px;
+                }
+                h1, h2 {
+                    color: #ffffff;
+                }
+                h1 {
+                    border-bottom: 1px solid #444;
+                    padding-bottom: 10px;
+                }
+                h2 {
+                    font-size: 1.2em;
+                    margin-top: 20px;
+                    color: #aaa;
+                    padding-bottom: 5px;
+                    border-bottom: 1px solid #444;
+                }
+                .history-item {
+                    padding: 12px;
+                    margin: 5px 0;
+                    border-radius: 4px;
+                    background-color: #333;
+                    transition: background-color 0.2s;
+                    display: flex;
+                    align-items: center;
+                }
+                .history-item:hover {
+                    background-color: #444;
+                }
+                .history-item a {
+                    color: #4a9eff;
+                    text-decoration: none;
+                    flex-grow: 1;
+                }
+                .history-item a:hover {
+                    text-decoration: underline;
+                }
+                .history-item .icon {
+                    margin-right: 12px;
+                    color: #888;
+                    font-size: 1.1em;
+                }
+                .search-query {
+                    color: #4a9eff;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Browsing History</h1>
+        """
+        
+        current_day = None
+        for item in self.history_manager.get_items():
+            day = self.get_day_header(item['timestamp'])
+            
+            if day != current_day:
+                if current_day is not None:
+                    history_html += "</div>"
+                current_day = day
+                history_html += f"<h2>{day}</h2><div class='day-group'>"
+            
+            display_text = self.history_manager.get_display_text(item['url'], item['title'])
+            icon = "🔍" if "Searched for:" in display_text else "🌐"
+            
+            history_html += f"""
+            <div class="history-item">
+                <span class="icon">{icon}</span>
+                <a href="{item['url']}">{display_text}</a>
+            </div>
+            """
+        
+        if current_day is not None:
+            history_html += "</div>"
+        
+        history_html += """
+        </body>
+        </html>
+        """
+        
+        self.browser.setHtml(history_html)
+
 class CloseButtonTabBar(QTabBar):
     def __init__(self):
         super().__init__()
@@ -185,6 +340,7 @@ class StratusBrowser(QMainWindow):
         self.setWindowTitle("")
         self.setGeometry(100, 100, 1200, 800)
         self.setWindowIcon(QIcon("path/to/your/icon.png"))
+        self.history_manager = HistoryManager()
 
         self.setStyleSheet("""
             QMainWindow { 
@@ -262,6 +418,18 @@ class StratusBrowser(QMainWindow):
         reload_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
         reload_shortcut.activated.connect(self.reload_current_tab)
 
+                # Add history shortcut
+        if sys.platform == 'darwin':
+            history_shortcut = QShortcut(QKeySequence("Meta+Shift+H"), self)
+        else:
+            history_shortcut = QShortcut(QKeySequence("Ctrl+Shift+H"), self)
+        history_shortcut.activated.connect(self.show_history)
+
+    def show_history(self):
+        history_tab = HistoryTab(self, self.history_manager)
+        index = self.tabs.addTab(history_tab, "History")
+        self.tabs.setCurrentIndex(index)
+
     def next_tab(self):
         current = self.tabs.currentIndex()
         if current < self.tabs.count() - 1:
@@ -282,7 +450,7 @@ class StratusBrowser(QMainWindow):
             current_tab.browser.reload()
 
     def add_new_tab(self):
-        new_tab = BrowserTab()
+        new_tab = BrowserTab(self.history_manager)
         index = self.tabs.addTab(new_tab, "New Tab")
         self.tabs.setCurrentIndex(index)
         new_tab.browser.titleChanged.connect(lambda title, tab=new_tab: self.update_tab_title(tab, title))
