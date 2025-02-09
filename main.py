@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
                             QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import QUrl, Qt
-from PyQt6.QtGui import QIcon, QPalette, QColor
+from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut
 
 class CustomTabWidget(QTabWidget):
     def __init__(self):
@@ -73,6 +73,7 @@ class BrowserTab(QWidget):
             }
         """)
         self.url_bar.returnPressed.connect(self.load_url)
+        self.url_bar.clear()
         
         button_style = """
             QPushButton {
@@ -118,12 +119,24 @@ class BrowserTab(QWidget):
         self.layout.addWidget(nav_container)
         self.layout.addWidget(self.browser)
         
-
         self.browser.urlChanged.connect(self.update_url)
         self.browser.loadStarted.connect(lambda: self.reload_button.setText("✕"))
         self.browser.loadFinished.connect(lambda: self.reload_button.setText("⟳"))
         
         self.browser.loadFinished.connect(self.update_navigation_state)
+        
+        # Add tab-specific shortcuts
+        self.setup_shortcuts()
+        
+    def setup_shortcuts(self):
+        # Reload page
+        reload_shortcut = QShortcut(QKeySequence("F5"), self)
+        reload_shortcut.activated.connect(self.browser.reload)
+        
+        # Focus URL bar
+        focus_url_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
+        focus_url_shortcut.activated.connect(self.url_bar.selectAll)
+        focus_url_shortcut.activated.connect(self.url_bar.setFocus)
         
     def update_navigation_state(self):
         self.back_button.setEnabled(self.browser.history().canGoBack())
@@ -140,7 +153,10 @@ class BrowserTab(QWidget):
             self.browser.setUrl(QUrl(search_url))
 
     def update_url(self, url):
-        self.url_bar.setText(url.toString())
+        if url.toString() == "https://www.google.com/":
+            self.url_bar.clear()
+        else:
+            self.url_bar.setText(url.toString())
 
 class CloseButtonTabBar(QTabBar):
     def __init__(self):
@@ -217,6 +233,53 @@ class StratusBrowser(QMainWindow):
         self.setCentralWidget(main_container)
         
         self.add_new_tab()
+        self.setup_shortcuts()
+
+    def setup_shortcuts(self):
+        # New tab
+        new_tab_shortcut = QShortcut(QKeySequence("Ctrl+T"), self)
+        new_tab_shortcut.activated.connect(self.add_new_tab)
+        
+        # Close tab
+        close_tab_shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
+        close_tab_shortcut.activated.connect(lambda: self.close_tab(self.tabs.currentIndex()))
+        
+        # Next tab
+        if sys.platform == 'darwin':
+            next_tab_shortcut = QShortcut(QKeySequence("Meta+Shift+]"), self)
+        else:
+            next_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+]"), self)
+        next_tab_shortcut.activated.connect(self.next_tab)
+        
+        # Previous tab
+        if sys.platform == 'darwin':
+            prev_tab_shortcut = QShortcut(QKeySequence("Meta+Shift+["), self)
+        else:
+            prev_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+["), self)
+        prev_tab_shortcut.activated.connect(self.prev_tab)
+        
+        # Reload page (global)
+        reload_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        reload_shortcut.activated.connect(self.reload_current_tab)
+
+    def next_tab(self):
+        current = self.tabs.currentIndex()
+        if current < self.tabs.count() - 1:
+            self.tabs.setCurrentIndex(current + 1)
+        else:
+            self.tabs.setCurrentIndex(0)
+
+    def prev_tab(self):
+        current = self.tabs.currentIndex()
+        if current > 0:
+            self.tabs.setCurrentIndex(current - 1)
+        else:
+            self.tabs.setCurrentIndex(self.tabs.count() - 1)
+
+    def reload_current_tab(self):
+        current_tab = self.tabs.currentWidget()
+        if isinstance(current_tab, BrowserTab):
+            current_tab.browser.reload()
 
     def add_new_tab(self):
         new_tab = BrowserTab()

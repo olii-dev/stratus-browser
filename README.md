@@ -3,13 +3,24 @@
 **Stratus Browser** is a modern browser created for an amazing browsing experience with a sleek, minimalistic interface. Created with the latest technologies, Stratus provides a fast and smooth browsing experience while focusing on simplicity.
 
 ## Features:
-- **Customizable Interface**: Modern design with rounded corners and smooth transitions.
+- **Customisable Interface**: Modern design with rounded corners and smooth transitions.
 - **Fast Navigation**: Go back, forward, or reload pages with just a click of a button.
 - **Search Bar**: Search the web directly from the URL bar or visit websites easily.
 - **Chromium-based**: Powered by PyQt6's QWebEngineView, offering compatibility with all websites.
+- **Keyboard Shortcuts**: Stratus even has a wide range of keyboard shortcuts you can use! Check them out [[#Keyboard Shortcuts|here]]!
 
 ## Getting Started:
-To get started with Stratus Browser, simply download the application and launch it on your machine. Use the URL bar to visit your favorite websites or perform quick Google searches.
+Stratus Browser is not currently avaliable *yet*, so this means you cannot Get Startedm ***(yet!)***. I hope this changes within the next few months!
+
+## Keyboard Shortcuts:
+- Tab Management:
+    - Ctrl/Command+T: New tab
+    - Ctrl/Command+W: Close current tab
+    - Ctrl/+Shift+]: Next tab
+    - Ctrl+Shift+[: Previous tab
+- Navigation:
+    - F5 or Ctrl/Command+R: Reload page
+    - Ctrl/Command+L: Focus URL bar and select all text
 
 ## Technologies Used:
 - **Python**
