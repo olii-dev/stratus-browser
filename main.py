@@ -5,9 +5,10 @@ from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
                             QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineHistory
-from PyQt6.QtCore import QUrl, Qt, QTimer
-from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut, QFontDatabase
+from PyQt6.QtWebEngineCore import QWebEngineHistory, QWebEngineProfile
+from PyQt6.QtCore import QUrl, Qt, QTimer, QSize
+from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut, QImage, QPixmap
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 class HistoryManager:
     def __init__(self):
@@ -44,40 +45,91 @@ class HistoryManager:
 
         return title
 
+def get_styles():
+    return """
+    QMainWindow, QWidget {
+        background: #1a1a1a;
+        color: #fff;
+    }
+    QTabWidget::pane {
+        border: none;
+        background: #1a1a1a;
+        margin-top: -1px;
+    }
+    QTabWidget {
+        padding-top: 0px;
+        background: #1a1a1a;
+    }
+    QTabBar::tab {
+        background: rgba(255, 255, 255, 0.05);
+        color: #bbb;
+        padding: 8px 30px 8px 12px;
+        margin: 2px 1px 0px 1px;
+        border-radius: 4px 4px 0 0;
+        min-width: 100px;
+        max-width: 200px;
+    }
+    QTabBar::tab:selected {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        font-weight: bold;
+    }
+    QTabBar::tab:hover:!selected {
+        background: rgba(255, 255, 255, 0.07);
+        color: #ddd;
+    }
+    QPushButton {
+        background-color: transparent;
+        color: #fff;
+        padding: 0;
+        border-radius: 16px;
+        margin: 8px 4px;
+        min-width: 32px;
+        max-width: 32px;
+        min-height: 32px;
+        max-height: 32px;
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 32px;
+    }
+    QPushButton:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    QPushButton:pressed {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    QPushButton:disabled {
+        color: rgba(255, 255, 255, 0.3);
+    }
+    QLineEdit {
+        background-color: #2b2b2b;
+        color: #fff;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid #222;
+        margin: 4px;
+        font-size: 13px;
+        selection-background-color: #0066cc;
+    }
+    QLineEdit:focus {
+        border: 1px solid #0066cc;
+        background-color: #333;
+    }
+    QLineEdit:hover {
+        background-color: #333;
+    }
+    """
+
 class CustomTabWidget(QTabWidget):
     def __init__(self):
         super().__init__()
-        self.new_tab_button = QPushButton("+")
-        self.new_tab_button.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #fff;
-                padding: 5px;
-                border-radius: 15px;
-                margin: 0px 8px 0px 2px;
-                min-width: 30px;
-                max-width: 30px;
-                min-height: 28px;
-                max-height: 28px;
-                font-size: 18px;
-                font-weight: 400;
-                line-height: 1;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.1);
-            }
-            QPushButton:pressed {
-                background-color: rgba(255, 255, 255, 0.05);
-            }
-        """)
-
-        self.setCornerWidget(self.new_tab_button, Qt.Corner.TopRightCorner)
 
 class BrowserTab(QWidget):
-    def __init__(self, history_manager, cache, parent=None):
+    def __init__(self, history_manager, cache, browser_window, parent=None):
         super().__init__(parent)
         self.history_manager = history_manager
         self.cache = cache
+        self.browser_window = browser_window  # Reference to StratusBrowser
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -156,6 +208,30 @@ class BrowserTab(QWidget):
         self.reload_button.setStyleSheet(button_style)
         self.reload_button.clicked.connect(self.browser.reload)
 
+        self.new_tab_button = QPushButton("+")
+        self.new_tab_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #fff;
+                padding: 5px;
+                border-radius: 15px;
+                margin: 0px 8px 0px 2px;
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 28px;
+                max-height: 28px;
+                font-size: 18px;
+                font-weight: 400;
+                line-height: 1;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.05);
+            }
+        """)
+
         nav_layout = QHBoxLayout(nav_container)
         nav_layout.setContentsMargins(8, 0, 8, 0)
         nav_layout.setSpacing(2)
@@ -163,6 +239,7 @@ class BrowserTab(QWidget):
         nav_layout.addWidget(self.forward_button)
         nav_layout.addWidget(self.reload_button)
         nav_layout.addWidget(self.url_bar)
+        nav_layout.addWidget(self.new_tab_button)
 
         self.layout.addWidget(nav_container)
         self.layout.addWidget(self.browser)
@@ -171,7 +248,9 @@ class BrowserTab(QWidget):
         self.browser.urlChanged.connect(self.record_history)
         self.browser.loadStarted.connect(lambda: self.reload_button.setText("✕"))
         self.browser.loadFinished.connect(lambda: self.reload_button.setText("⟳"))
+        self.browser.loadFinished.connect(self.handle_load_finished)
         self.browser.loadFinished.connect(self.update_navigation_state)
+        self.browser.iconChanged.connect(self.update_tab_icon)
 
         # Add tab-specific shortcuts
         self.setup_shortcuts()
@@ -215,10 +294,26 @@ class BrowserTab(QWidget):
         # Cache the page content
         self.browser.page().toHtml(lambda html: self.cache.update({url: html}))
 
-class HistoryTab(BrowserTab):
+    def handle_load_finished(self, success):
+        if not success:
+            self.browser.setHtml("<h1>Failed to load page</h1>")
+
+    def update_tab_icon(self, icon):
+        index = self.browser_window.tabs.indexOf(self)
+        if index >= 0:
+            self.browser_window.tabs.setTabIcon(index, icon)
+
+class HistoryTab(QWidget):
     def __init__(self, browser_window, history_manager, cache, parent=None):
-        super().__init__(history_manager, cache, parent)
+        super().__init__(parent)
         self.browser_window = browser_window
+        self.history_manager = history_manager
+        self.cache = cache
+        self.layout = QVBoxLayout(self)
+
+        self.browser = QWebEngineView()
+        self.layout.addWidget(self.browser)
+
         self.display_history()
 
     def get_day_header(self, date):
@@ -347,8 +442,9 @@ class CloseButtonTabBar(QTabBar):
                 line-height: 20px;
             }
             QTabBar::tab:selected {
-                background: rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.1);
                 color: #fff;
+                font-weight: bold;
             }
             QTabBar::tab:hover:!selected {
                 background: rgba(255, 255, 255, 0.07);
@@ -378,46 +474,13 @@ class CloseButtonTabBar(QTabBar):
 class StratusBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("")
+        self.setWindowTitle("Stratus Browser")
         self.setGeometry(100, 100, 1200, 800)
         self.setWindowIcon(QIcon("path/to/your/icon.png"))
         self.history_manager = HistoryManager()
         self.cache = {}
 
-        self.setStyleSheet("""
-            QMainWindow {
-                background: #1a1a1a;
-            }
-            QWidget {
-                background: #1a1a1a;
-            }
-            QTabWidget::pane {
-                border: none;
-                background: #1a1a1a;
-                margin-top: -1px;
-            }
-            QTabWidget {
-                padding-top: 0px;
-                background: #1a1a1a;
-            }
-            QTabBar::tab {
-                background: rgba(255, 255, 255, 0.05);
-                color: #bbb;
-                padding: 8px 30px 8px 12px;
-                margin: 2px 1px 0px 1px;
-                border-radius: 4px 4px 0 0;
-                min-width: 100px;
-                max-width: 200px;
-            }
-            QTabBar::tab:selected {
-                background: rgba(255, 255, 255, 0.08);
-                color: #fff;
-            }
-            QTabBar::tab:hover:!selected {
-                background: rgba(255, 255, 255, 0.07);
-                color: #ddd;
-            }
-        """)
+        self.setStyleSheet(get_styles())
 
         main_container = QWidget()
         main_layout = QVBoxLayout(main_container)
@@ -430,7 +493,6 @@ class StratusBrowser(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.setDocumentMode(True)
         self.tabs.setMovable(True)
-        self.tabs.new_tab_button.clicked.connect(self.add_new_tab)
 
         main_layout.addWidget(self.tabs)
         self.setCentralWidget(main_container)
@@ -452,30 +514,40 @@ class StratusBrowser(QMainWindow):
         close_tab_shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
         close_tab_shortcut.activated.connect(lambda: self.close_tab(self.tabs.currentIndex()))
 
-        # Next tab
-        if sys.platform == 'darwin':
-            next_tab_shortcut = QShortcut(QKeySequence("Meta+Shift+]"), self)
-        else:
-            next_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+]"), self)
+        # Next tab (fixed)
+        next_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+]"), self)
         next_tab_shortcut.activated.connect(self.next_tab)
+        # Alternative shortcut for macOS compatibility
+        next_tab_shortcut_alt = QShortcut(QKeySequence("Ctrl+Tab"), self)
+        next_tab_shortcut_alt.activated.connect(self.next_tab)
 
-        # Previous tab
-        if sys.platform == 'darwin':
-            prev_tab_shortcut = QShortcut(QKeySequence("Meta+Shift+["), self)
-        else:
-            prev_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+["), self)
+        # Previous tab (fixed)
+        prev_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+["), self)
         prev_tab_shortcut.activated.connect(self.prev_tab)
+        # Alternative shortcut for macOS compatibility
+        prev_tab_shortcut_alt = QShortcut(QKeySequence("Ctrl+Shift+Tab"), self)
+        prev_tab_shortcut_alt.activated.connect(self.prev_tab)
 
-        # Reload page (global)
+        # Reload page
         reload_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
         reload_shortcut.activated.connect(self.reload_current_tab)
 
-        # Add history shortcut
-        if sys.platform == 'darwin':
-            history_shortcut = QShortcut(QKeySequence("Meta+Shift+H"), self)
-        else:
-            history_shortcut = QShortcut(QKeySequence("Ctrl+Shift+H"), self)
+        # History shortcut (fixed)
+        history_shortcut = QShortcut(QKeySequence("Ctrl+Shift+H"), self)
         history_shortcut.activated.connect(self.show_history)
+
+        # Focus URL bar (fixed)
+        focus_url_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
+        focus_url_shortcut.activated.connect(self.focus_url_bar)
+        # Alternative shortcut for macOS compatibility
+        focus_url_shortcut_alt = QShortcut(QKeySequence("Alt+D"), self)
+        focus_url_shortcut_alt.activated.connect(self.focus_url_bar)
+
+    def focus_url_bar(self):
+        current_tab = self.tabs.currentWidget()
+        if isinstance(current_tab, BrowserTab):
+            current_tab.url_bar.setFocus()
+            current_tab.url_bar.selectAll()
 
     def show_history(self):
         history_tab = HistoryTab(self, self.history_manager, self.cache)
@@ -502,7 +574,7 @@ class StratusBrowser(QMainWindow):
             current_tab.browser.reload()
 
     def add_new_tab(self, url=None):
-        new_tab = BrowserTab(self.history_manager, self.cache)
+        new_tab = BrowserTab(self.history_manager, self.cache, self)
         if url:
             new_tab.browser.setUrl(QUrl(url))
         index = self.tabs.addTab(new_tab, "New Tab")
