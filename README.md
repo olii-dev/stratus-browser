@@ -10,17 +10,18 @@
 - **Keyboard Shortcuts**: Stratus even has a wide range of keyboard shortcuts you can use! Check them out [here](#keyboard-shortcuts)!
 
 ## Getting Started
-Stratus Browser is not currently avaliable *yet*, so this means you cannot Get Started ***(yet!)***. I hope this changes within the next few months!
+Stratus Browser is not currently available *yet*, so this means you cannot Get Started ***(yet!)***. I hope this changes within the next few months!
 
 ## Keyboard Shortcuts
 - Tab Management:
     - Ctrl/Command+T: New tab
     - Ctrl/Command+W: Close current tab
-    - Ctrl/+Shift+]: Next tab
-    - Ctrl+Shift+[: Previous tab
+    - Ctrl/Command+Shift+]: Next tab
+    - Ctrl/Command+Shift+[: Previous tab
 - Navigation:
     - F5 or Ctrl/Command+R: Reload page
-    - Ctrl/Command+L: Focus URL bar and select all text
+    - Ctrl+L: Focus URL bar and select all text (For Mac = option+D)
+    - Ctrl/Command+Shift+H: Open Browsing History
 
 ## Technologies Used
 - **Python**
@@ -31,4 +32,4 @@ Stratus Browser is not currently avaliable *yet*, so this means you cannot Get S
 Feel free to open an issue or submit a pull request if you'd like to contribute to Stratus Browser.
 
 ## License
-Stratus Browser is released under the MIT License.
+Stratus Browser is released under the MPL-2.0 License.

@@ -148,6 +148,7 @@ class BrowserTab(QWidget):
         """)
 
         self.url_bar = QLineEdit()
+        self.url_bar.setPlaceholderText("Search or enter address")
         self.url_bar.setStyleSheet("""
             QLineEdit {
                 background-color: #2b2b2b;
@@ -165,6 +166,9 @@ class BrowserTab(QWidget):
             }
             QLineEdit:hover {
                 background-color: #333;
+            }
+                        QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
             }
         """)
         self.url_bar.returnPressed.connect(self.load_url)
@@ -232,6 +236,9 @@ class BrowserTab(QWidget):
             }
         """)
 
+        # Connect the new tab button to the add_new_tab method
+        self.new_tab_button.clicked.connect(self.browser_window.add_new_tab)
+
         nav_layout = QHBoxLayout(nav_container)
         nav_layout.setContentsMargins(8, 0, 8, 0)
         nav_layout.setSpacing(2)
@@ -291,8 +298,8 @@ class BrowserTab(QWidget):
             self.cache_page(url.toString())
 
     def cache_page(self, url):
-        # Cache the page content
-        self.browser.page().toHtml(lambda html: self.cache.update({url: html}))
+        # Cache the page content with timestamp
+        self.browser.page().toHtml(lambda html: self.cache.update({url: (html, datetime.now())}))
 
     def handle_load_finished(self, success):
         if not success:
