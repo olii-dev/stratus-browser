@@ -3,9 +3,9 @@ import re
 import urllib.parse
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
-                            QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
+                             QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineHistory, QWebEngineProfile
+from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineUrlRequestInterceptor
 from PyQt6.QtCore import QUrl, Qt, QTimer, QSize
 from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut, QImage, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
@@ -40,7 +40,7 @@ class HistoryManager:
 
         if title == url:
             domain = urllib.parse.urlparse(url).netloc
-            domain = re.sub(r'^www\.', '', domain)  # Remove www.
+            domain = re.sub(r'^www\.', '', domain)
             return f"Visited {domain}"
 
         return title
@@ -120,6 +120,16 @@ def get_styles():
     }
     """
 
+class TrackerBlocker(QWebEngineUrlRequestInterceptor):
+    def __init__(self, tracker_list):
+        super().__init__()
+        self.tracker_list = tracker_list
+
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        if any(tracker in url for tracker in self.tracker_list):
+            info.block(True)
+
 class CustomTabWidget(QTabWidget):
     def __init__(self):
         super().__init__()
@@ -129,7 +139,7 @@ class BrowserTab(QWidget):
         super().__init__(parent)
         self.history_manager = history_manager
         self.cache = cache
-        self.browser_window = browser_window  # Reference to StratusBrowser
+        self.browser_window = browser_window
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -167,7 +177,7 @@ class BrowserTab(QWidget):
             QLineEdit:hover {
                 background-color: #333;
             }
-                        QLineEdit::placeholder {
+            QLineEdit::placeholder {
                 color: rgba(255, 255, 255, 0.5);
             }
         """)
@@ -236,7 +246,6 @@ class BrowserTab(QWidget):
             }
         """)
 
-        # Connect the new tab button to the add_new_tab method
         self.new_tab_button.clicked.connect(self.browser_window.add_new_tab)
 
         nav_layout = QHBoxLayout(nav_container)
@@ -259,15 +268,12 @@ class BrowserTab(QWidget):
         self.browser.loadFinished.connect(self.update_navigation_state)
         self.browser.iconChanged.connect(self.update_tab_icon)
 
-        # Add tab-specific shortcuts
         self.setup_shortcuts()
 
     def setup_shortcuts(self):
-        # Reload page
         reload_shortcut = QShortcut(QKeySequence("F5"), self)
         reload_shortcut.activated.connect(self.browser.reload)
 
-        # Focus URL bar
         focus_url_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
         focus_url_shortcut.activated.connect(self.url_bar.selectAll)
         focus_url_shortcut.activated.connect(self.url_bar.setFocus)
@@ -298,7 +304,6 @@ class BrowserTab(QWidget):
             self.cache_page(url.toString())
 
     def cache_page(self, url):
-        # Cache the page content with timestamp
         self.browser.page().toHtml(lambda html: self.cache.update({url: (html, datetime.now())}))
 
     def handle_load_finished(self, success):
@@ -507,46 +512,169 @@ class StratusBrowser(QMainWindow):
         self.add_new_tab()
         self.setup_shortcuts()
 
-        # Cache cleanup timer
+# Block known trackers
+        self.tracker_list = [
+    "google-analytics.com",
+    "analytics.google.com",
+    "googletagmanager.com",
+    "doubleclick.net",
+    "googleadservices.com",
+    "googlesyndication.com",
+    "facebook.com",
+    "facebook.net",
+    "fbcdn.net",
+    "fbevents.com",
+    "omtrdc.net",
+    "demdex.net",
+    "twitter.com",
+    "twimg.com",
+    "t.co",
+    "linkedin.com",
+    "licdn.com",
+    "snap.licdn.com",
+    "clarity.ms",
+    "hotjar.com",
+    "hotjar.io",
+    "mixpanel.com",
+    "segment.com",
+    "segment.io",
+    "crazyegg.com",
+    "hubspot.com",
+    "hs-analytics.net",
+    "hs-scripts.com",
+    "newrelic.com",
+    "pinterest.com",
+    "pinimg.com",
+    "yandex.ru",
+    "mc.yandex.ru",
+    "bat.bing.com",
+    "scorecardresearch.com",
+    "quantserve.com",
+    "chartbeat.com",
+    "chartbeat.net",
+    "outbrain.com",
+    "taboola.com",
+    "addthis.com",
+    "addthisedge.com",
+    "disqus.com",
+    "disquscdn.com",
+    "optimizely.com",
+    "criteo.com",
+    "criteo.net",
+    "appnexus.com",
+    "adnxs.com",
+    "bluekai.com",
+    "sharethis.com",
+    "matomo.cloud",
+    "matomo.org",
+    "amplitude.com",
+    "api.amplitude.com",
+    "cdn.amplitude.com",
+    "analytics.tiktok.com",
+    "analytics-sg.tiktok.com",
+    "business-api.tiktok.com",
+    "ads-api.tiktok.com",
+    "pixel.facebook.com",
+    "an.facebook.com",
+    "pixel-a.basis.net",
+    "pixel-sync.sitescout.com",
+    "pixel.tapad.com",
+    "pixel.advertising.com",
+    "pixel.mathtag.com",
+    "id5-sync.com",
+    "match.adsrvr.org",
+    "secure.adnxs.com",
+    "pixel.rubiconproject.com",
+    "analytics.yahoo.com",
+    "sp.analytics.yahoo.com",
+    "udc.yahoo.com",
+    "log.outbrain.com",
+    "amplify.outbrain.com",
+    "widgets.outbrain.com",
+    "snowplow.io",
+    "collector.snowplow.io",
+    "plausible.io",
+    "collector.plausible.io",
+    "analytics.heap.io",
+    "tracking.monsido.com",
+    "cdn.mouseflow.com",
+    "tools.mouseflow.com",
+    "stats.wp.com",
+    "pixel.wp.com",
+    "s.pinimg.com",
+    "trk.pinterest.com",
+    "analytics.pinterest.com",
+    "log.pinterest.com",
+    "adservice.google.com",
+    "adservice.google.com.au",
+    "googlesurvey.com",
+    "moatads.com",
+    "tapad.com",
+    "everesttech.net",
+    "quantcast.com",
+    "adsrvr.org",
+    "advertising.com",
+    "adobedtm.com",
+    "demdex.net",
+    "adform.net",
+    "openx.net",
+    "adroll.com",
+    "exelator.com",
+    "zqtk.net",
+    "revcontent.com",
+    "3lift.com",
+    "bidswitch.net",
+    "adnuntius.com",
+    "adscale.de",
+    "mediamath.com",
+    "admedo.com",
+    "connexity.net",
+    "smartadserver.com",
+    "spotxchange.com",
+    "rubiconproject.com",
+    "gumgum.com",
+    "yieldlab.net",
+    "pubmatic.com",
+    "simpli.fi",
+    "adacado.com"
+        ]
+
+        profile = QWebEngineProfile.defaultProfile()
+        interceptor = TrackerBlocker(self.tracker_list)
+        QWebEngineProfile.defaultProfile().setUrlRequestInterceptor(interceptor)
+
         self.cache_cleanup_timer = QTimer()
         self.cache_cleanup_timer.timeout.connect(self.cleanup_cache)
         self.cache_cleanup_timer.start(3600000)  # 1 hour
 
     def setup_shortcuts(self):
-        # New tab
         new_tab_shortcut = QShortcut(QKeySequence("Ctrl+T"), self)
         new_tab_shortcut.activated.connect(self.add_new_tab)
 
-        # Close tab
         close_tab_shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
         close_tab_shortcut.activated.connect(lambda: self.close_tab(self.tabs.currentIndex()))
 
-        # Next tab (fixed)
         next_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+]"), self)
         next_tab_shortcut.activated.connect(self.next_tab)
-        # Alternative shortcut for macOS compatibility
+
         next_tab_shortcut_alt = QShortcut(QKeySequence("Ctrl+Tab"), self)
         next_tab_shortcut_alt.activated.connect(self.next_tab)
 
-        # Previous tab (fixed)
         prev_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+["), self)
         prev_tab_shortcut.activated.connect(self.prev_tab)
-        # Alternative shortcut for macOS compatibility
+
         prev_tab_shortcut_alt = QShortcut(QKeySequence("Ctrl+Shift+Tab"), self)
         prev_tab_shortcut_alt.activated.connect(self.prev_tab)
 
-        # Reload page
         reload_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
         reload_shortcut.activated.connect(self.reload_current_tab)
 
-        # History shortcut (fixed)
         history_shortcut = QShortcut(QKeySequence("Ctrl+Shift+H"), self)
         history_shortcut.activated.connect(self.show_history)
 
-        # Focus URL bar (fixed)
         focus_url_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
         focus_url_shortcut.activated.connect(self.focus_url_bar)
-        # Alternative shortcut for macOS compatibility
+
         focus_url_shortcut_alt = QShortcut(QKeySequence("Alt+D"), self)
         focus_url_shortcut_alt.activated.connect(self.focus_url_bar)
 
@@ -598,9 +726,22 @@ class StratusBrowser(QMainWindow):
             self.tabs.setTabText(index, title[:20] + "..." if len(title) > 20 else title)
 
     def cleanup_cache(self):
-        # Remove cache entries older than 1 hour
         current_time = datetime.now()
-        keys_to_remove = [key for key, (timestamp, _) in self.cache.items() if current_time - timestamp > timedelta(hours=1)]
+        keys_to_remove = []
+
+        for key, (timestamp, _) in self.cache.items():
+            try:
+                if isinstance(timestamp, str):
+                    timestamp = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
+                elif not isinstance(timestamp, datetime):
+                    continue
+
+                if current_time - timestamp > timedelta(hours=1):
+                    keys_to_remove.append(key)
+            except ValueError:
+
+                continue
+
         for key in keys_to_remove:
             del self.cache[key]
 
