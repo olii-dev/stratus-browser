@@ -2,17 +2,19 @@ import sys
 import re
 import urllib.parse
 from datetime import datetime, timedelta
+from collections import defaultdict
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
                              QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineUrlRequestInterceptor
-from PyQt6.QtCore import QUrl, Qt, QTimer, QSize
+from PyQt6.QtCore import QUrl, Qt, QTimer, QSize, QStringListModel
 from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut, QImage, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 class HistoryManager:
     def __init__(self):
         self.history_items = []
+        self.frequency_dict = defaultdict(int)
 
     def add_item(self, url, title):
         if not title:
@@ -22,6 +24,13 @@ class HistoryManager:
             'title': title,
             'timestamp': datetime.now()
         })
+        self.update_frequency(url)
+        self.update_frequency(title)
+
+    def update_frequency(self, text):
+        words = re.findall(r'\b\w+\b', text)
+        for word in words:
+            self.frequency_dict[word.lower()] += 1
 
     def get_items(self):
         return sorted(self.history_items, key=lambda x: x['timestamp'], reverse=True)
@@ -63,11 +72,11 @@ def get_styles():
     QTabBar::tab {
         background: rgba(255, 255, 255, 0.05);
         color: #bbb;
-        padding: 8px 30px 8px 12px;
+        padding: 8px 12px;
         margin: 2px 1px 0px 1px;
         border-radius: 4px 4px 0 0;
-        min-width: 100px;
-        max-width: 200px;
+        min-width: 50px;
+        max-width: 150px;
     }
     QTabBar::tab:selected {
         background: rgba(255, 255, 255, 0.1);
@@ -134,6 +143,9 @@ class CustomTabWidget(QTabWidget):
     def __init__(self):
         super().__init__()
 
+from PyQt6.QtCore import QStringListModel
+from PyQt6.QtWidgets import QCompleter
+
 class BrowserTab(QWidget):
     def __init__(self, history_manager, cache, browser_window, parent=None):
         super().__init__(parent)
@@ -182,7 +194,12 @@ class BrowserTab(QWidget):
             }
         """)
         self.url_bar.returnPressed.connect(self.load_url)
-        self.url_bar.clear()
+
+        self.completer = QCompleter(self)
+        self.completer.setModel(QStringListModel())
+        self.url_bar.setCompleter(self.completer)
+
+        self.update_completer_model()
 
         button_style = """
             QPushButton {
@@ -270,6 +287,14 @@ class BrowserTab(QWidget):
 
         self.setup_shortcuts()
 
+    def update_completer_model(self):
+        # Populate the completer model with suggestions
+        suggestions = [item['url'] for item in self.history_manager.get_items()]
+        suggestions.extend(self.history_manager.frequency_dict.keys())
+        suggestions = sorted(suggestions, key=lambda x: self.history_manager.frequency_dict.get(x.lower(), 0), reverse=True)
+        model = QStringListModel(suggestions)
+        self.completer.setModel(model)
+
     def setup_shortcuts(self):
         reload_shortcut = QShortcut(QKeySequence("F5"), self)
         reload_shortcut.activated.connect(self.browser.reload)
@@ -302,13 +327,14 @@ class BrowserTab(QWidget):
         if url.isValid() and not url.toString().startswith("data:"):
             self.history_manager.add_item(url.toString(), self.browser.title())
             self.cache_page(url.toString())
+            self.update_completer_model()
 
     def cache_page(self, url):
         self.browser.page().toHtml(lambda html: self.cache.update({url: (html, datetime.now())}))
 
     def handle_load_finished(self, success):
         if not success:
-            self.browser.setHtml("<h1>Failed to load page</h1>")
+            self.browser.setHtml("<h1 style='text-align: center; font-weight: bold;'>Failed to load page... Check your internet!</h1>")
 
     def update_tab_icon(self, icon):
         index = self.browser_window.tabs.indexOf(self)
@@ -444,14 +470,11 @@ class CloseButtonTabBar(QTabBar):
             QTabBar::tab {
                 background: rgba(255, 255, 255, 0.05);
                 color: #bbb;
-                padding: 8px 32px 8px 16px;
-                margin: 4px 2px 0px 2px;
+                padding: 8px 12px;
+                margin: 4px 1px 0px 1px;
                 border-radius: 8px 8px 0 0;
-                min-width: 120px;
-                max-width: 200px;
-                min-height: 20px;
-                font-size: 13px;
-                line-height: 20px;
+                min-width: 50px;
+                max-width: 150px;
             }
             QTabBar::tab:selected {
                 background: rgba(255, 255, 255, 0.1);
@@ -482,6 +505,7 @@ class CloseButtonTabBar(QTabBar):
                 background: rgba(255, 255, 255, 0.1);
             }
         """)
+        self.setElideMode(Qt.TextElideMode.ElideRight)
 
 class StratusBrowser(QMainWindow):
     def __init__(self):
@@ -512,131 +536,37 @@ class StratusBrowser(QMainWindow):
         self.add_new_tab()
         self.setup_shortcuts()
 
-# Block known trackers
         self.tracker_list = [
-    "google-analytics.com",
-    "analytics.google.com",
-    "googletagmanager.com",
-    "doubleclick.net",
-    "googleadservices.com",
-    "googlesyndication.com",
-    "facebook.com",
-    "facebook.net",
-    "fbcdn.net",
-    "fbevents.com",
-    "omtrdc.net",
-    "demdex.net",
-    "twitter.com",
-    "twimg.com",
-    "t.co",
-    "linkedin.com",
-    "licdn.com",
-    "snap.licdn.com",
-    "clarity.ms",
-    "hotjar.com",
-    "hotjar.io",
-    "mixpanel.com",
-    "segment.com",
-    "segment.io",
-    "crazyegg.com",
-    "hubspot.com",
-    "hs-analytics.net",
-    "hs-scripts.com",
-    "newrelic.com",
-    "pinterest.com",
-    "pinimg.com",
-    "yandex.ru",
-    "mc.yandex.ru",
-    "bat.bing.com",
-    "scorecardresearch.com",
-    "quantserve.com",
-    "chartbeat.com",
-    "chartbeat.net",
-    "outbrain.com",
-    "taboola.com",
-    "addthis.com",
-    "addthisedge.com",
-    "disqus.com",
-    "disquscdn.com",
-    "optimizely.com",
-    "criteo.com",
-    "criteo.net",
-    "appnexus.com",
-    "adnxs.com",
-    "bluekai.com",
-    "sharethis.com",
-    "matomo.cloud",
-    "matomo.org",
-    "amplitude.com",
-    "api.amplitude.com",
-    "cdn.amplitude.com",
-    "analytics.tiktok.com",
-    "analytics-sg.tiktok.com",
-    "business-api.tiktok.com",
-    "ads-api.tiktok.com",
-    "pixel.facebook.com",
-    "an.facebook.com",
-    "pixel-a.basis.net",
-    "pixel-sync.sitescout.com",
-    "pixel.tapad.com",
-    "pixel.advertising.com",
-    "pixel.mathtag.com",
-    "id5-sync.com",
-    "match.adsrvr.org",
-    "secure.adnxs.com",
-    "pixel.rubiconproject.com",
-    "analytics.yahoo.com",
-    "sp.analytics.yahoo.com",
-    "udc.yahoo.com",
-    "log.outbrain.com",
-    "amplify.outbrain.com",
-    "widgets.outbrain.com",
-    "snowplow.io",
-    "collector.snowplow.io",
-    "plausible.io",
-    "collector.plausible.io",
-    "analytics.heap.io",
-    "tracking.monsido.com",
-    "cdn.mouseflow.com",
-    "tools.mouseflow.com",
-    "stats.wp.com",
-    "pixel.wp.com",
-    "s.pinimg.com",
-    "trk.pinterest.com",
-    "analytics.pinterest.com",
-    "log.pinterest.com",
-    "adservice.google.com",
-    "adservice.google.com.au",
-    "googlesurvey.com",
-    "moatads.com",
-    "tapad.com",
-    "everesttech.net",
-    "quantcast.com",
-    "adsrvr.org",
-    "advertising.com",
-    "adobedtm.com",
-    "demdex.net",
-    "adform.net",
-    "openx.net",
-    "adroll.com",
-    "exelator.com",
-    "zqtk.net",
-    "revcontent.com",
-    "3lift.com",
-    "bidswitch.net",
-    "adnuntius.com",
-    "adscale.de",
-    "mediamath.com",
-    "admedo.com",
-    "connexity.net",
-    "smartadserver.com",
-    "spotxchange.com",
-    "rubiconproject.com",
-    "gumgum.com",
-    "yieldlab.net",
-    "pubmatic.com",
-    "simpli.fi",
-    "adacado.com"
+            "google-analytics.com", "analytics.google.com", "googletagmanager.com",
+            "doubleclick.net", "googleadservices.com", "googlesyndication.com",
+            "facebook.com", "facebook.net", "fbcdn.net", "fbevents.com", "omtrdc.net",
+            "demdex.net", "twitter.com", "twimg.com", "t.co", "linkedin.com",
+            "licdn.com", "snap.licdn.com", "clarity.ms", "hotjar.com", "hotjar.io",
+            "mixpanel.com", "segment.com", "segment.io", "crazyegg.com", "hubspot.com",
+            "hs-analytics.net", "hs-scripts.com", "newrelic.com", "pinterest.com",
+            "pinimg.com", "yandex.ru", "mc.yandex.ru", "bat.bing.com", "scorecardresearch.com",
+            "quantserve.com", "chartbeat.com", "chartbeat.net", "outbrain.com", "taboola.com",
+            "addthis.com", "addthisedge.com", "disqus.com", "disquscdn.com", "optimizely.com",
+            "criteo.com", "criteo.net", "appnexus.com", "adnxs.com", "bluekai.com",
+            "sharethis.com", "matomo.cloud", "matomo.org", "amplitude.com", "api.amplitude.com",
+            "cdn.amplitude.com", "analytics.tiktok.com", "analytics-sg.tiktok.com",
+            "business-api.tiktok.com", "ads-api.tiktok.com", "pixel.facebook.com",
+            "an.facebook.com", "pixel-a.basis.net", "pixel-sync.sitescout.com",
+            "pixel.tapad.com", "pixel.advertising.com", "pixel.mathtag.com", "id5-sync.com",
+            "match.adsrvr.org", "secure.adnxs.com", "pixel.rubiconproject.com",
+            "analytics.yahoo.com", "sp.analytics.yahoo.com", "udc.yahoo.com",
+            "log.outbrain.com", "amplify.outbrain.com", "widgets.outbrain.com",
+            "snowplow.io", "collector.snowplow.io", "plausible.io", "collector.plausible.io",
+            "analytics.heap.io", "tracking.monsido.com", "cdn.mouseflow.com", "tools.mouseflow.com",
+            "stats.wp.com", "pixel.wp.com", "s.pinimg.com", "trk.pinterest.com",
+            "analytics.pinterest.com", "log.pinterest.com", "adservice.google.com",
+            "adservice.google.com.au", "googlesurvey.com", "moatads.com", "tapad.com",
+            "everesttech.net", "quantcast.com", "adsrvr.org", "advertising.com",
+            "adobedtm.com", "demdex.net", "adform.net", "openx.net", "adroll.com",
+            "exelator.com", "zqtk.net", "revcontent.com", "3lift.com", "bidswitch.net",
+            "adnuntius.com", "adscale.de", "mediamath.com", "admedo.com", "connexity.net",
+            "smartadserver.com", "spotxchange.com", "rubiconproject.com", "gumgum.com",
+            "yieldlab.net", "pubmatic.com", "simpli.fi", "adacado.com"
         ]
 
         profile = QWebEngineProfile.defaultProfile()
@@ -739,7 +669,6 @@ class StratusBrowser(QMainWindow):
                 if current_time - timestamp > timedelta(hours=1):
                     keys_to_remove.append(key)
             except ValueError:
-
                 continue
 
         for key in keys_to_remove:
