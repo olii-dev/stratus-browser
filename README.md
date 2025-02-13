@@ -1,4 +1,7 @@
 # Stratus Browser
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 **Stratus Browser** is a modern browser created for an amazing browsing experience with a sleek, minimalistic interface. Created with the latest technologies, Stratus provides a fast and smooth browsing experience while focusing on simplicity.
 
@@ -34,6 +37,21 @@ Stratus Browser is released under the MPL-2.0 License.
 ## Contributors
 #### Thanks to these awesome awesome people for contributing:
 
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="http://vigh.me"><img src="https://avatars.githubusercontent.com/u/97999742?v=4?s=100" width="100px;" alt="Vignesh K"/><br /><sub><b>Vignesh K</b></sub></a><br /><a href="https://github.com/olii-dev/stratus-browser/commits?author=Vigneshk5" title="Code">💻</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
 <!-- markdownlint-disable -->
