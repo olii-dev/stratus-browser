@@ -1,20 +1,133 @@
 import sys
 import re
 import urllib.parse
+import json
 from datetime import datetime, timedelta
 from collections import defaultdict
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
-                             QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar)
+                             QPushButton, QLineEdit, QHBoxLayout, QTabWidget, QTabBar, QProgressBar, QFileDialog, QTableWidget, QTableWidgetItem, 
+                           QHeaderView, QVBoxLayout, QWidget, QPushButton, QHBoxLayout)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineUrlRequestInterceptor
-from PyQt6.QtCore import QUrl, Qt, QTimer, QSize, QStringListModel
+from PyQt6.QtCore import QUrl, Qt, QTimer, QSize, QStringListModel, QDir, QFileInfo
 from PyQt6.QtGui import QIcon, QPalette, QColor, QKeySequence, QShortcut, QImage, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
+class DownloadManager(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.downloads = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Create downloads table
+        self.table = QTableWidget(0, 4)  # rows, columns
+        self.table.setHorizontalHeaderLabels(["File", "Size", "Progress", "Status"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(1, 100)
+        self.table.setColumnWidth(2, 200)
+        self.table.setColumnWidth(3, 100)
+        
+        # Button container
+        button_container = QWidget()
+        button_layout = QHBoxLayout(button_container)
+        
+        # Clear completed button
+        clear_button = QPushButton("Clear Completed")
+        clear_button.clicked.connect(self.clear_completed)
+        button_layout.addWidget(clear_button)
+        
+        # Add widgets to layout
+        layout.addWidget(self.table)
+        layout.addWidget(button_container)
+
+    def start_download(self, download):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        
+        # File name
+        file_item = QTableWidgetItem(QFileInfo(download.path()).fileName())
+        self.table.setItem(row, 0, file_item)
+        
+        # File size
+        size_item = QTableWidgetItem("Calculating...")
+        self.table.setItem(row, 1, size_item)
+        
+        # Progress bar
+        progress = QProgressBar()
+        progress.setTextVisible(True)
+        self.table.setCellWidget(row, 2, progress)
+        
+        # Status
+        status_item = QTableWidgetItem("Starting...")
+        self.table.setItem(row, 3, status_item)
+        
+        # Store download reference
+        self.downloads[download] = {
+            'row': row,
+            'progress': progress
+        }
+        
+        # Connect signals
+        download.downloadProgress.connect(lambda received, total, d=download: 
+            self.update_progress(d, received, total))
+        download.finished.connect(lambda d=download: self.download_finished(d))
+        download.stateChanged.connect(lambda state, d=download: 
+            self.update_status(d, state))
+
+    def update_progress(self, download, received, total):
+        if download in self.downloads:
+            row = self.downloads[download]['row']
+            progress = self.downloads[download]['progress']
+            
+            # Update progress bar
+            progress.setMaximum(total)
+            progress.setValue(received)
+            
+            # Update size
+            size = self.format_size(total)
+            self.table.item(row, 1).setText(size)
+
+    def download_finished(self, download):
+        if download in self.downloads:
+            row = self.downloads[download]['row']
+            self.table.item(row, 3).setText("Completed")
+
+    def update_status(self, download, state):
+        if download in self.downloads:
+            row = self.downloads[download]['row']
+            status_map = {
+                0: "Starting",
+                1: "Downloading",
+                2: "Completed",
+                3: "Failed",
+                4: "Cancelled"
+            }
+            self.table.item(row, 3).setText(status_map.get(state, "Unknown"))
+
+    def clear_completed(self):
+        for row in range(self.table.rowCount() - 1, -1, -1):
+            if self.table.item(row, 3).text() == "Completed":
+                self.table.removeRow(row)
+
+    @staticmethod
+    def format_size(size):
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+    
 class HistoryManager:
     def __init__(self):
         self.history_items = []
         self.frequency_dict = defaultdict(int)
+        self.load_from_file()
 
     def add_item(self, url, title):
         if not title:
@@ -22,10 +135,11 @@ class HistoryManager:
         self.history_items.append({
             'url': url,
             'title': title,
-            'timestamp': datetime.now()
+            'timestamp': datetime.now().isoformat()
         })
         self.update_frequency(url)
         self.update_frequency(title)
+        self.save_to_file()
 
     def update_frequency(self, text):
         words = re.findall(r'\b\w+\b', text)
@@ -53,6 +167,19 @@ class HistoryManager:
             return f"Visited {domain}"
 
         return title
+
+    def save_to_file(self):
+        with open('browser_data.json', 'w') as file:
+            json.dump({'history': self.history_items, 'frequency': self.frequency_dict}, file)
+
+    def load_from_file(self):
+        try:
+            with open('browser_data.json', 'r') as file:
+                data = json.load(file)
+                self.history_items = data.get('history', [])
+                self.frequency_dict = defaultdict(int, data.get('frequency', {}))
+        except FileNotFoundError:
+            pass
 
 def get_styles():
     return """
@@ -286,6 +413,38 @@ class BrowserTab(QWidget):
         self.browser.iconChanged.connect(self.update_tab_icon)
 
         self.setup_shortcuts()
+        
+        # Add this line to setup the download handler
+        self.setup_download_handler()
+
+    def setup_download_handler(self):
+        self.browser.page().profile().downloadRequested.connect(self.handle_download)
+
+    def handle_download(self, download):
+        # Get default download path or ask user
+        default_path = QDir.homePath() + "/Downloads/" + download.suggestedFileName()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save File", default_path, "All Files (*.*)"
+        )
+        
+        if path:
+            download.setPath(path)
+            download.accept()
+            
+            # Show download manager tab if not already visible
+            download_manager = None
+            for i in range(self.browser_window.tabs.count()):
+                if isinstance(self.browser_window.tabs.widget(i), DownloadManager):
+                    download_manager = self.browser_window.tabs.widget(i)
+                    self.browser_window.tabs.setCurrentIndex(i)
+                    break
+            
+            if not download_manager:
+                download_manager = DownloadManager()
+                index = self.browser_window.tabs.addTab(download_manager, "Downloads")
+                self.browser_window.tabs.setCurrentIndex(index)
+            
+            download_manager.start_download(download)
 
     def update_completer_model(self):
         # Populate the completer model with suggestions
@@ -330,11 +489,11 @@ class BrowserTab(QWidget):
             self.update_completer_model()
 
     def cache_page(self, url):
-        self.browser.page().toHtml(lambda html: self.cache.update({url: (html, datetime.now())}))
+        self.browser.page().toHtml(lambda html: self.cache.update({url: (html, datetime.now().isoformat())}))
 
     def handle_load_finished(self, success):
         if not success:
-            self.browser.setHtml("<h1 style='text-align: center; font-weight: bold;'>Failed to load page... Check your internet!</h1>")
+            self.browser.setHtml("<h1 style='text-align: center; font-weight: bold;'>Failed to load page... I am sorry.</h1>")
 
     def update_tab_icon(self, icon):
         index = self.browser_window.tabs.indexOf(self)
@@ -432,7 +591,7 @@ class HistoryTab(QWidget):
 
         current_day = None
         for item in self.history_manager.get_items():
-            day = self.get_day_header(item['timestamp'])
+            day = self.get_day_header(datetime.fromisoformat(item['timestamp']))
 
             if day != current_day:
                 if current_day is not None:
@@ -512,7 +671,6 @@ class StratusBrowser(QMainWindow):
         super().__init__()
         self.setWindowTitle("Stratus Browser")
         self.setGeometry(100, 100, 1200, 800)
-        self.setWindowIcon(QIcon("path/to/your/icon.png"))
         self.history_manager = HistoryManager()
         self.cache = {}
 
@@ -533,41 +691,52 @@ class StratusBrowser(QMainWindow):
         main_layout.addWidget(self.tabs)
         self.setCentralWidget(main_container)
 
-        self.add_new_tab()
+        self.load_tabs_from_file()
+        if self.tabs.count() == 0:
+            self.add_new_tab()
+
         self.setup_shortcuts()
 
         self.tracker_list = [
-            "google-analytics.com", "analytics.google.com", "googletagmanager.com",
-            "doubleclick.net", "googleadservices.com", "googlesyndication.com",
-            "facebook.com", "facebook.net", "fbcdn.net", "fbevents.com", "omtrdc.net",
-            "demdex.net", "twitter.com", "twimg.com", "t.co", "linkedin.com",
-            "licdn.com", "snap.licdn.com", "clarity.ms", "hotjar.com", "hotjar.io",
-            "mixpanel.com", "segment.com", "segment.io", "crazyegg.com", "hubspot.com",
-            "hs-analytics.net", "hs-scripts.com", "newrelic.com", "pinterest.com",
-            "pinimg.com", "yandex.ru", "mc.yandex.ru", "bat.bing.com", "scorecardresearch.com",
-            "quantserve.com", "chartbeat.com", "chartbeat.net", "outbrain.com", "taboola.com",
-            "addthis.com", "addthisedge.com", "disqus.com", "disquscdn.com", "optimizely.com",
-            "criteo.com", "criteo.net", "appnexus.com", "adnxs.com", "bluekai.com",
-            "sharethis.com", "matomo.cloud", "matomo.org", "amplitude.com", "api.amplitude.com",
-            "cdn.amplitude.com", "analytics.tiktok.com", "analytics-sg.tiktok.com",
-            "business-api.tiktok.com", "ads-api.tiktok.com", "pixel.facebook.com",
-            "an.facebook.com", "pixel-a.basis.net", "pixel-sync.sitescout.com",
-            "pixel.tapad.com", "pixel.advertising.com", "pixel.mathtag.com", "id5-sync.com",
-            "match.adsrvr.org", "secure.adnxs.com", "pixel.rubiconproject.com",
-            "analytics.yahoo.com", "sp.analytics.yahoo.com", "udc.yahoo.com",
-            "log.outbrain.com", "amplify.outbrain.com", "widgets.outbrain.com",
-            "snowplow.io", "collector.snowplow.io", "plausible.io", "collector.plausible.io",
-            "analytics.heap.io", "tracking.monsido.com", "cdn.mouseflow.com", "tools.mouseflow.com",
-            "stats.wp.com", "pixel.wp.com", "s.pinimg.com", "trk.pinterest.com",
-            "analytics.pinterest.com", "log.pinterest.com", "adservice.google.com",
-            "adservice.google.com.au", "googlesurvey.com", "moatads.com", "tapad.com",
-            "everesttech.net", "quantcast.com", "adsrvr.org", "advertising.com",
-            "adobedtm.com", "demdex.net", "adform.net", "openx.net", "adroll.com",
-            "exelator.com", "zqtk.net", "revcontent.com", "3lift.com", "bidswitch.net",
-            "adnuntius.com", "adscale.de", "mediamath.com", "admedo.com", "connexity.net",
-            "smartadserver.com", "spotxchange.com", "rubiconproject.com", "gumgum.com",
-            "yieldlab.net", "pubmatic.com", "simpli.fi", "adacado.com"
-        ]
+    "google-analytics.com", "analytics.google.com", "googletagmanager.com",
+    "doubleclick.net", "googleadservices.com", "googlesyndication.com",
+    "facebook.com", "facebook.net", "fbcdn.net", "fbevents.com", "omtrdc.net",
+    "demdex.net", "twitter.com", "twimg.com", "t.co", "linkedin.com",
+    "licdn.com", "snap.licdn.com", "clarity.ms", "hotjar.com", "hotjar.io",
+    "mixpanel.com", "segment.com", "segment.io", "crazyegg.com", "hubspot.com",
+    "hs-analytics.net", "hs-scripts.com", "newrelic.com", "pinterest.com",
+    "pinimg.com", "yandex.ru", "mc.yandex.ru", "bat.bing.com", "scorecardresearch.com",
+    "quantserve.com", "chartbeat.com", "chartbeat.net", "outbrain.com", "taboola.com",
+    "addthis.com", "addthisedge.com", "disqus.com", "disquscdn.com", "optimizely.com",
+    "criteo.com", "criteo.net", "appnexus.com", "adnxs.com", "bluekai.com",
+    "sharethis.com", "matomo.cloud", "matomo.org", "amplitude.com", "api.amplitude.com",
+    "cdn.amplitude.com", "analytics.tiktok.com", "analytics-sg.tiktok.com",
+    "business-api.tiktok.com", "ads-api.tiktok.com", "pixel.facebook.com",
+    "an.facebook.com", "pixel-a.basis.net", "pixel-sync.sitescout.com",
+    "pixel.tapad.com", "pixel.advertising.com", "pixel.mathtag.com", "id5-sync.com",
+    "match.adsrvr.org", "secure.adnxs.com", "pixel.rubiconproject.com",
+    "analytics.yahoo.com", "sp.analytics.yahoo.com", "udc.yahoo.com",
+    "log.outbrain.com", "amplify.outbrain.com", "widgets.outbrain.com",
+    "snowplow.io", "collector.snowplow.io", "plausible.io", "collector.plausible.io",
+    "analytics.heap.io", "tracking.monsido.com", "cdn.mouseflow.com", "tools.mouseflow.com",
+    "stats.wp.com", "pixel.wp.com", "s.pinimg.com", "trk.pinterest.com",
+    "analytics.pinterest.com", "log.pinterest.com", "adservice.google.com",
+    "adservice.google.com.au", "googlesurvey.com", "moatads.com", "tapad.com",
+    "everesttech.net", "quantcast.com", "adsrvr.org", "advertising.com",
+    "adobedtm.com", "demdex.net", "adform.net", "openx.net", "adroll.com",
+    "exelator.com", "zqtk.net", "revcontent.com", "3lift.com", "bidswitch.net",
+    "adnuntius.com", "adscale.de", "mediamath.com", "admedo.com", "connexity.net",
+    "smartadserver.com", "spotxchange.com", "rubiconproject.com", "gumgum.com",
+    "yieldlab.net", "pubmatic.com", "simpli.fi", "adacado.com", "bidgear.com",
+    "bidr.trellian.com", "rtbhouse.com", "triplelift.com", "loopme.com",
+    "casalemedia.com", "eyeota.net", "adsymptotic.com", "adtech.de", "trustx.org",
+    "deepintent.com", "beeswax.com", "stackadapt.com", "districtm.io",
+    "adlightning.com", "brightmountainmedia.com", "yieldmo.com", "media.net",
+    "gumgum.com", "connatix.com", "teads.tv", "revtrax.com", "revx.io",
+    "neustar.biz", "dstillery.com", "intent.com", "fifty.io", "adloox.com",
+    "onead.io", "liftoff.io", "zedo.com", "exponential.com", "parsely.com",
+    "quantcast.com", "ezoic.com", "permutive.com", "zeotap.com"
+        ] 
 
         profile = QWebEngineProfile.defaultProfile()
         interceptor = TrackerBlocker(self.tracker_list)
@@ -681,6 +850,37 @@ class StratusBrowser(QMainWindow):
 
     def tab_changed(self, index):
         self.load_tab_content(index)
+
+    def closeEvent(self, event):
+        print("Saving tabs to file...")
+        self.save_tabs_to_file()
+        self.history_manager.save_to_file()
+        event.accept()
+
+    def save_tabs_to_file(self):
+        tabs_data = []
+        for index in range(self.tabs.count()):
+            tab = self.tabs.widget(index)
+            if isinstance(tab, BrowserTab):
+                tabs_data.append({
+                    'url': tab.browser.url().toString(),
+                    'title': self.tabs.tabText(index)
+                })
+        with open('browser_data.json', 'w') as file:
+            json.dump({'tabs': tabs_data, 'history': self.history_manager.history_items, 'frequency': self.history_manager.frequency_dict}, file)
+        print(f"Tabs data saved: {tabs_data}")
+
+    def load_tabs_from_file(self):
+        try:
+            with open('browser_data.json', 'r') as file:
+                data = json.load(file)
+                print(f"Loading tabs from file: {data.get('tabs', [])}")
+                for tab_data in data.get('tabs', []):
+                    self.add_new_tab(tab_data['url'])
+        except FileNotFoundError:
+            print("No saved tabs found.")
+        except Exception as e:
+            print(f"Error loading tabs: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

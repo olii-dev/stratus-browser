@@ -2,6 +2,11 @@
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
+---
+### ⚠️ **Important Notice** ⚠️
+> [!IMPORTANT]
+> If you contribute to this project, you must ***always*** submit a pull request to contribute back your modifications. This is a requirement specified in the license (MPL-2.0) for this repository.
+---
 
 **Stratus Browser** is a modern browser created for an amazing browsing experience with a sleek, minimalistic interface. Created with the latest technologies, Stratus provides a fast and smooth browsing experience while focusing on simplicity.
 

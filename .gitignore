@@ -1,6 +1,8 @@
 node_modules
 out
 .DS_Store
+history.json
+browser_data.json
 
 # Ignore macOS build files
 *.dmg
