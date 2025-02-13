@@ -28,8 +28,17 @@ Stratus Browser is not currently available *yet*, so this means you cannot Get S
 - **PyQt6**: For building the graphical user interface.
 - **QWebEngineView**: Rendering web pages with Chromium engine.
 
-## Contributing
-Feel free to open an issue or submit a pull request if you'd like to contribute to Stratus Browser.
-
 ## License
 Stratus Browser is released under the MPL-2.0 License.
+
+## Contributors
+#### Thanks to these awesome awesome people for contributing:
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
