@@ -16,6 +16,8 @@
 - **Search Bar**: Search the web directly from the URL bar or visit websites easily.
 - **Chromium-based**: Powered by PyQt6's QWebEngineView, offering compatibility with all websites.
 - **Keyboard Shortcuts**: Stratus even has a wide range of keyboard shortcuts you can use! Check them out [here](#keyboard-shortcuts)!
+- **Browsing History**: Stratus lets you access your browsing history.
+- **Modern Looking**: Stratus is built with the modern world in mind!
 
 ## Getting Started
 Stratus Browser is not currently available *yet*, so this means you cannot Get Started ***(yet!)***. I hope this changes within the next few months!
